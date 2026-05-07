@@ -9,7 +9,7 @@ let yPos = 15;
 let velX = 0;
 let velY = 0;
 
-const r = 12; // player radius
+const r = 12;
 
 let walls = [];
 let holes = [];
@@ -21,45 +21,42 @@ let restartBtn;
 // WIN ZONE
 let winZone = { x: 20, y: 575, r: 15 };
 
-// -----------------------------
 // TIMER + HIGHSCORE
-// -----------------------------
 let startTime = 0;
 let currentTime = 0;
 let bestTime = null;
 
-// -----------------------------
 // SOUNDS
-// -----------------------------
 let failSound;
 let winSound;
 let arcadeMusic;
+
+// FIREWORKS
+let fireworks = [];
+let particles = [];
 
 // -----------------------------
 // PRELOAD SOUNDS
 // -----------------------------
 function preload() {
   failSound = loadSound("Fail.mp3");
-  failSound.setVolume(15.0); // 1.0 is default, go higher to boost
+  failSound.setVolume(15.0);
 
   winSound = loadSound("Win.mp3");
-  winSound.setVolume(15.0); // 1.0 is default, go higher to boost
+  winSound.setVolume(15.0);
 
   arcadeMusic = loadSound("Arcade.mp3");
-  arcadeMusic.setVolume(0.5); // 1.0 is default, go higher to boost
-
+  arcadeMusic.setVolume(0.5);
 }
 
 function setup() {
   createCanvas(600, 600);
   rectMode(CENTER);
 
-  // Load high score
   if (localStorage.getItem("bestTime")) {
     bestTime = float(localStorage.getItem("bestTime"));
   }
 
-  // Serial setup
   port = createSerial();
   connectBtn = createButton("Connect to Arduino");
   connectBtn.mousePressed(connectBtnClick);
@@ -81,17 +78,21 @@ function setup() {
   buildMaze();
   buildHoles();
 
-  // Start timer
   startTime = millis();
 
-  // Start arcade music
   arcadeMusic.setLoop(true);
   arcadeMusic.play();
+
+  // ------------------------------------------------------
+  //  Testing option without actually winning
+  // ------------------------------------------------------
+  //  gameWin = true; //testing screen, comment out when playing
+  //  restartBtn.show();
 }
 
-//   ------------------------------------------------------
-//       DRAW FUNCTION
-//   ------------------------------------------------------
+// ------------------------------------------------------
+//   DRAW FUNCTION
+// ------------------------------------------------------
 
 function draw() {
   background(150, 101, 51);
@@ -106,14 +107,12 @@ function draw() {
     return;
   }
 
-  // Update timer
   currentTime = (millis() - startTime) / 1000;
 
   drawMaze();
   drawHoles();
   drawWinZone();
 
-  // Display timer
   fill(255);
   textSize(22);
   textAlign(LEFT, TOP);
@@ -321,7 +320,7 @@ function checkHoleCollision() {
     let rad = r + h.r;
 
     if (distSq < rad * rad) {
-      if (!gameOver) failSound.play(); // PLAY FAIL SOUND
+      if (!gameOver) failSound.play();
       gameOver = true;
       restartBtn.show();
       return;
@@ -344,13 +343,10 @@ function checkWinCondition() {
   let distSq = dx * dx + dy * dy;
 
   if (distSq < (r + winZone.r) ** 2) {
-
-    if (!gameWin) winSound.play(); // PLAY WIN SOUND
-
+    if (!gameWin) winSound.play();
     gameWin = true;
     restartBtn.show();
 
-    // Save high score
     if (bestTime === null || currentTime < bestTime) {
       bestTime = currentTime;
       localStorage.setItem("bestTime", bestTime);
@@ -359,7 +355,105 @@ function checkWinCondition() {
 }
 
 // ------------------------------------------------------
-// GAME OVER / WIN SCREENS
+// WIN SCREEN WITH FIREWORKS
+// ------------------------------------------------------
+
+function drawWinScreen() {
+  background(0);
+
+  // Spawn new firework every 30 frames
+  if (frameCount % 30 === 0) {
+    fireworks.push({
+      x: random(80, width - 80),
+      y: random(80, height - 200),
+      vy: random(-6, -3),
+      exploded: false,
+    });
+  }
+
+  // Update and draw rockets
+  for (let i = fireworks.length - 1; i >= 0; i--) {
+    let fw = fireworks[i];
+    fw.y += fw.vy;
+    fw.vy += 0.15;
+
+    fill(255, 220, 80);
+    noStroke();
+    ellipse(fw.x, fw.y, 4, 4);
+
+    // Explode at apex
+    if (fw.vy >= -0.5) {
+      explodeFirework(fw);
+      fireworks.splice(i, 1);
+    }
+  }
+
+  // Update and draw particles
+  for (let i = particles.length - 1; i >= 0; i--) {
+    let p = particles[i];
+    p.x += p.vx;
+    p.y += p.vy;
+    p.vy += 0.08;
+    p.vx *= 0.97;
+    p.life -= 3;
+
+    let alpha = map(p.life, 0, 255, 0, 255);
+    fill(p.r, p.g, p.b, alpha);
+    noStroke();
+    ellipse(p.x, p.y, p.size, p.size);
+
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+
+  // Win text
+  fill(255);
+  textSize(48);
+  textAlign(CENTER, CENTER);
+  text("YOU WIN!", width / 2, height / 2 - 60);
+
+  textSize(28);
+  fill(200, 255, 200);
+  text("Time: " + currentTime.toFixed(2) + "s", width / 2, height / 2);
+
+  if (bestTime !== null) {
+    fill(255, 220, 80);
+    text("Best: " + bestTime.toFixed(2) + "s", width / 2, height / 2 + 45);
+  }
+}
+
+function explodeFirework(fw) {
+  let neonColors = [
+    [255, 0, 200], // hot pink
+    [0, 255, 200], // cyan
+    [180, 0, 255], // purple
+    [0, 255, 80], // green
+    [255, 200, 0], // yellow
+    [255, 80, 0], // orange
+    [0, 150, 255], // blue
+  ];
+
+  let c = random(neonColors);
+  let numParticles = int(random(60, 100));
+
+  for (let i = 0; i < numParticles; i++) {
+    let angle = random(TWO_PI);
+    let speed = random(1, 6);
+    particles.push({
+      x: fw.x,
+      y: fw.y,
+      vx: cos(angle) * speed,
+      vy: sin(angle) * speed,
+      r: c[0],
+      g: c[1],
+      b: c[2],
+      size: random(3, 7),
+      life: 255,
+    });
+  }
+}
+
+// ------------------------------------------------------
+// GAME OVER SCREEN
 // ------------------------------------------------------
 
 function drawGameOver() {
@@ -368,20 +462,6 @@ function drawGameOver() {
   textSize(50);
   textAlign(CENTER, CENTER);
   text("YOU FELL!", width / 2, height / 2);
-}
-
-function drawWinScreen() {
-  background(0, 150, 0);
-  fill(255);
-  textSize(40);
-  textAlign(CENTER, CENTER);
-
-  text("YOU WIN!", width / 2, height / 2 - 40);
-  text("Time: " + currentTime.toFixed(2), width / 2, height / 2 + 10);
-
-  if (bestTime !== null) {
-    text("Best: " + bestTime.toFixed(2), width / 2, height / 2 + 60);
-  }
 }
 
 // ------------------------------------------------------
@@ -397,10 +477,11 @@ function restartGame() {
   gameOver = false;
   gameWin = false;
 
-  // Restart timer
+  fireworks = [];
+  particles = [];
+
   startTime = millis();
 
-  // Restart music
   arcadeMusic.play();
 
   restartBtn.hide();
